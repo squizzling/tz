@@ -27,14 +27,13 @@ func Must1[T any](t T, err error) T {
 }
 
 func main() {
-	n := 2
-	if len(os.Args) > 1 {
-		i, err := strconv.ParseInt(os.Args[1], 10, 64)
-		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Failed to parse column count: %s\n", err)
-			os.Exit(1)
-		} else {
-			n = int(i)
+	var names []string
+	names = os.Args[1:]
+	if len(os.Args) == 1 { // If there's no arguments, create 2 blank columns
+		names = make([]string, 2)
+	} else if len(os.Args) == 2 { // If there's exactly 1 argument, and it can be parsed as an integer, make that many blank columns.
+		if n, err := strconv.Atoi(os.Args[1]); err == nil {
+			names = make([]string, n)
 		}
 	}
 
@@ -58,7 +57,8 @@ func main() {
 		},
 	}
 
-	for i := range n {
+	a.names = names
+	for i := range a.names {
 		a.times = append(a.times, now.Add(time.Duration(i)*time.Hour))
 	}
 
@@ -94,6 +94,7 @@ type app struct {
 
 	timeIndex int
 	tzIndex   int
+	names     []string
 	times     []time.Time
 
 	message string
@@ -146,52 +147,78 @@ func (a *app) poll() bool {
 	return true
 }
 
+func timeInLoc(t time.Time, loc *time.Location) string {
+	return t.In(loc).Format("2006-01-02 15:04 MST")
+}
+
+func (a *app) writeTable(
+	write func(s string, reverse bool, bold bool),
+	newLine func(),
+) {
+	maxLen := make([]int, len(a.times))
+	for column, name := range a.names {
+		maxLen[column] = len(name)
+	}
+	for _, loc := range a.timezones {
+		for column, t := range a.times {
+			maxLen[column] = max(maxLen[column], len(timeInLoc(t, loc)))
+		}
+	}
+
+	renderHeader := false
+	for _, n := range a.names {
+		if n != "" {
+			renderHeader = true
+		}
+	}
+
+	// Print headers
+	if renderHeader {
+		for column, name := range a.names {
+			if column > 0 {
+				write("   ", false, false)
+			}
+			write(padRight(name, maxLen[column]), false, column == a.timeIndex)
+		}
+		newLine()
+	}
+
+	// Print each timezone
+	for y, loc := range a.timezones {
+		for column, t := range a.times {
+			if column > 0 {
+				write("   ", y == a.tzIndex, false)
+			}
+			write(padRight(timeInLoc(t, loc), maxLen[column]), y == a.tzIndex, column == a.timeIndex)
+		}
+		newLine()
+	}
+}
+
 func (a *app) render() {
 	a.s.Clear()
 	w, h := a.s.Size()
-	maxLen := make([]int, len(a.times))
-	for _, loc := range a.timezones {
-		for x, t := range a.times {
-			maxLen[x] = max(maxLen[x], len(t.In(loc).Format("2006-01-02 15:04 MST")))
-		}
-	}
-	for y, loc := range a.timezones {
-		startX := 0
-		for x, t := range a.times {
-			style := tcell.StyleDefault
-			style = style.Reverse(y == a.tzIndex)
 
-			ts := padRight(t.In(loc).Format("2006-01-02 15:04 MST"), maxLen[x])
-
-			if x > 0 {
-				drawText(a.s, startX, y, w, h, style.Reverse(y == a.tzIndex), "   ")
-				startX += 3
-			}
-			drawText(a.s, startX, y, w, h, style.Reverse(y == a.tzIndex).Bold(x == a.timeIndex), ts)
-			startX += len(ts)
-		}
+	startX := 0
+	y := 0
+	write := func(s string, reverse bool, bold bool) {
+		drawText(a.s, startX, y, w, h, tcell.StyleDefault.Reverse(reverse).Bold(bold), s)
+		startX += len(s)
 	}
-	drawText(a.s, 0, len(a.timezones), w, h, tcell.StyleDefault, a.message)
+	newLine := func() {
+		startX = 0
+		y++
+	}
+
+	a.writeTable(write, newLine)
+	write(a.message, false, false)
 }
 
 func (a *app) copyTable() {
-	maxLen := make([]int, len(a.times))
-	for _, loc := range a.timezones {
-		for x, t := range a.times {
-			maxLen[x] = max(maxLen[x], len(t.In(loc).Format("2006-01-02 15:04 MST")))
-		}
-	}
-
 	var sb strings.Builder
-	for _, loc := range a.timezones {
-		for x, t := range a.times {
-			if x > 0 {
-				sb.WriteString("   ")
-			}
-			sb.WriteString(padRight(t.In(loc).Format("2006-01-02 15:04 MST"), maxLen[x]))
-		}
-		sb.WriteString("\r\n")
-	}
+	write := func(s string, reverse bool, bold bool) { sb.WriteString(s) }
+	newLine := func() { sb.WriteByte('\n') }
+	a.writeTable(write, newLine)
 	clipboard.Set(sb.String())
 }
 

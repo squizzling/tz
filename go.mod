@@ -1,6 +1,6 @@
 module github.com/squizzling/tz
 
-go 1.24.1
+go 1.26.5
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1
