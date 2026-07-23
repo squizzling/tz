@@ -53,6 +53,7 @@ func main() {
 			time.UTC,
 			Must1(time.LoadLocation("Asia/Kolkata")),
 			Must1(time.LoadLocation("Australia/Sydney")),
+			Must1(time.LoadLocation("Australia/Perth")),
 			Must1(time.LoadLocation("Pacific/Auckland")),
 		},
 	}
@@ -64,7 +65,6 @@ func main() {
 	for a.poll() {
 		a.render()
 	}
-
 }
 
 func drawText(

@@ -2,7 +2,10 @@ module github.com/squizzling/tz
 
 go 1.24.1
 
-require github.com/gdamore/tcell/v2 v2.8.1
+require (
+	github.com/aymanbagabas/go-osc52/v2 v2.0.1
+	github.com/gdamore/tcell/v2 v2.8.1
+)
 
 require (
 	github.com/gdamore/encoding v1.0.1 // indirect
